@@ -80,7 +80,7 @@ use_hip_int4 = get_bool_env_var("SGLANG_INT4_WEIGHT")
 use_aiter_moe = get_bool_env_var("SGLANG_AITER_MOE")
 
 if _is_hip:
-    from aiter import ActivationType, QuantType
+    from aiter import ActivationType, QuantType, biased_grouped_topk
     from aiter.fused_moe_bf16_asm import asm_moe, ck_moe_2stages
     from aiter.ops.shuffle import shuffle_weight
 
@@ -888,18 +888,33 @@ class Fp8MoEMethod:
         from sglang.srt.layers.moe.topk import select_experts
 
         # Expert selection
-        topk_weights, topk_ids = select_experts(
-            hidden_states=x,
-            router_logits=router_logits,
-            use_grouped_topk=use_grouped_topk,
-            top_k=top_k,
-            renormalize=renormalize,
-            topk_group=topk_group,
-            num_expert_group=num_expert_group,
-            custom_routing_function=custom_routing_function,
-            correction_bias=correction_bias,
-            routed_scaling_factor=routed_scaling_factor,
-        )
+        if _is_hip and get_bool_env_var("SGLANG_AITER_MOE") and correction_bias is not None:
+            token = x.shape[0]
+            biased_grouped_topk(
+                router_logits,
+                correction_bias,
+                layer.ns_topk_weights[:token],
+                layer.ns_topk_ids[:token],
+                num_expert_group,
+                topk_group,
+                renormalize,
+                layer.routed_scaling_factor,
+            )
+            topk_ids = layer.total_topk_ids[:token]
+            topk_weights = layer.total_topk_weights[:token]
+        else:
+            topk_weights, topk_ids = select_experts(
+                hidden_states=x,
+                router_logits=router_logits,
+                use_grouped_topk=use_grouped_topk,
+                top_k=top_k,
+                renormalize=renormalize,
+                topk_group=topk_group,
+                num_expert_group=num_expert_group,
+                custom_routing_function=custom_routing_function,
+                correction_bias=correction_bias,
+                routed_scaling_factor=routed_scaling_factor,
+            )
 
         if _is_hip:
             ret = self.maybe_apply_hip_fused_experts(

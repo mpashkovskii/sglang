@@ -1414,6 +1414,10 @@ class DeepseekV2Model(nn.Module):
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.dp_size = get_local_attention_dp_size()
+        self.aiter_init = False
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.n_routed_experts = config.n_routed_experts
+        self.n_shared_experts = config.n_shared_experts
 
     def get_input_embeddings(self) -> torch.Tensor:
         return self.embed_tokens
@@ -1438,6 +1442,70 @@ class DeepseekV2Model(nn.Module):
             hidden_states = self.embed_tokens(input_ids)
         else:
             hidden_states = input_embeds
+
+        if _is_hip and get_bool_env_var("SGLANG_AITER_MOE") and not self.aiter_init:
+            tp_rank = get_tensor_model_parallel_rank()
+            tp_size = get_tensor_model_parallel_world_size()
+            top_k = self.num_experts_per_tok
+            num_experts = self.n_routed_experts
+            num_shared_experts = self.n_shared_experts
+            # if enable_ep_moe, need to add shared experts and one fake expert, otherwise, only add shared experts
+            num_topK_pad_experts = num_shared_experts
+            if global_server_args_dict["enable_ep_moe"]:
+                num_topK_pad_experts += 1
+            fake_expertid = num_experts + num_shared_experts
+
+            model_dim = hidden_states.shape[-1]
+            num_tokens = hidden_states.view(-1, model_dim).shape[0]
+            # TODO need find a formal way
+            assert num_tokens <= (4096 * 128)
+            num_tokens = 4096 * 128
+
+            # all layers resuse same buffer
+            self.total_topk_ids = torch.empty(
+                (num_tokens, top_k + num_topK_pad_experts),
+                dtype=torch.int32,
+                device="cuda",
+            )
+            self.ns_topk_ids, self.s_topk_ids = self.total_topk_ids.split(
+                [top_k, num_topK_pad_experts], dim=1
+            )
+            shared_expert_ids = [
+                num_experts + i
+                for i in range(num_topK_pad_experts)
+            ]
+
+            s_topk_ids_list = [shared_expert_ids] * num_tokens
+            if global_server_args_dict["enable_ep_moe"]:
+                s_topk_ids_list = [
+                    [fake_expertid] * (num_topK_pad_experts)
+                ] * num_tokens
+                for i in range(tp_rank, num_tokens, tp_size):
+                    s_topk_ids_list[i] = shared_expert_ids
+            
+            self.s_topk_ids[:] = torch.tensor(
+                s_topk_ids_list, dtype=torch.int32, device="cuda"
+            )
+            self.total_topk_weights = torch.empty(
+                (num_tokens, top_k + num_topK_pad_experts),
+                dtype=torch.float32,
+                device="cuda",
+            )
+            self.ns_topk_weights, self.s_topk_weights = self.total_topk_weights.split([top_k, num_topK_pad_experts], dim=1)
+            shared_E_score = 1.0
+            self.s_topk_weights.fill_(shared_E_score)
+
+            # forward to all EP_MOE
+            for i in range(len(self.layers)):
+                mlp = self.layers[i].mlp
+                if not isinstance(mlp, DeepseekV2MoE):
+                    continue
+                mlp.experts.total_topk_weights = self.total_topk_weights
+                mlp.experts.total_topk_ids = self.total_topk_ids
+                mlp.experts.ns_topk_weights = self.ns_topk_weights
+                mlp.experts.ns_topk_ids = self.ns_topk_ids
+            
+            self.aiter_init = True
 
         residual = None
         for i in range(len(self.layers)):
