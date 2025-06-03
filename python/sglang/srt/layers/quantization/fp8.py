@@ -893,8 +893,8 @@ class Fp8MoEMethod:
             biased_grouped_topk(
                 router_logits,
                 correction_bias,
-                layer.ns_topk_weights[:token],
-                layer.ns_topk_ids[:token],
+                layer.non_shared_topk_weights[:token],
+                layer.non_shared_topk_ids[:token],
                 num_expert_group,
                 topk_group,
                 renormalize,
