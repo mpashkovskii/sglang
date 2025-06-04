@@ -58,6 +58,7 @@ from sglang.srt.layers.moe.fused_moe_triton import FusedMoE
 from sglang.srt.layers.moe.topk import select_experts
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.quantization.deep_gemm import _ENABLE_JIT_DEEPGEMM
+from sglang.srt.layers.quantization.fp8 import Fp8MoEBlockscaleBuffers
 from sglang.srt.layers.quantization.fp8_kernel import (
     per_tensor_quant_mla_fp8,
     per_token_group_quant_mla_deep_gemm_masked_fp8,
@@ -113,6 +114,7 @@ expert_distribution_recorder = ExpertDistributionRecorder()
 
 logger = logging.getLogger(__name__)
 
+Fp8MoEBlockscaleBuffersInstance: Fp8MoEBlockscaleBuffers = None
 
 class AttnForwardMethod(IntEnum):
     # Use multi-head attention
@@ -247,6 +249,15 @@ class DeepseekV2MoE(nn.Module):
                 else {}
             ),
         )
+        if _is_hip and get_bool_env_var("SGLANG_AITER_MOE") and isinstance(self.experts, FusedMoE):
+            global Fp8MoEBlockscaleBuffersInstance
+            if Fp8MoEBlockscaleBuffersInstance is None:
+                Fp8MoEBlockscaleBuffersInstance = Fp8MoEBlockscaleBuffers(
+                    config.num_experts_per_tok,
+                    config.n_routed_experts,
+                    config.n_shared_experts,
+                )
+            Fp8MoEBlockscaleBuffersInstance.register_in_layer(self.experts)
 
         if config.n_shared_experts is not None and self.n_share_experts_fusion == 0:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
@@ -1381,8 +1392,6 @@ class DeepseekV2DecoderLayer(nn.Module):
 
 
 class DeepseekV2Model(nn.Module):
-    AITER_MOE_MAX_NUM_TOKENS = 4096 * 128
-    SHARED_E_SCORE = 1.0
     fall_back_to_pt_during_load = False
 
     def __init__(
@@ -1416,56 +1425,6 @@ class DeepseekV2Model(nn.Module):
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.dp_size = get_local_attention_dp_size()
-        if _is_hip and get_bool_env_var("SGLANG_AITER_MOE"):
-            tp_rank = get_tensor_model_parallel_rank()
-            tp_size = get_tensor_model_parallel_world_size()
-            num_topK_pad_experts = config.n_shared_experts
-            # if enable_ep_moe, need to add shared experts and one fake expert, otherwise, only add shared experts
-            if global_server_args_dict["enable_ep_moe"]:
-                num_topK_pad_experts += 1
-            fake_expertid = config.n_routed_experts + config.n_shared_experts
-
-            # all layers resuse same buffer
-            total_topk_ids = torch.empty(
-                (self.AITER_MOE_MAX_NUM_TOKENS, config.num_experts_per_tok + num_topK_pad_experts),
-                dtype=torch.int32,
-                device="cuda",
-            )
-            non_shared_topk_ids, shared_topk_ids = total_topk_ids.split(
-                [config.num_experts_per_tok, num_topK_pad_experts], dim=1
-            )
-            shared_expert_ids = [
-                config.n_routed_experts + i
-                for i in range(num_topK_pad_experts)
-            ]
-            shared_topk_ids_list = [shared_expert_ids] * self.AITER_MOE_MAX_NUM_TOKENS
-            if global_server_args_dict["enable_ep_moe"]:
-                shared_topk_ids_list = [[fake_expertid] * (num_topK_pad_experts)] * self.AITER_MOE_MAX_NUM_TOKENS
-                for i in range(tp_rank, self.AITER_MOE_MAX_NUM_TOKENS, tp_size):
-                    shared_topk_ids_list[i] = shared_expert_ids
-            shared_topk_ids[:] = torch.tensor(
-                shared_topk_ids_list, dtype=torch.int32, device="cuda"
-            )
-            
-            # all layers resuse same buffer
-            total_topk_weights = torch.empty(
-                (self.AITER_MOE_MAX_NUM_TOKENS, config.num_experts_per_tok + num_topK_pad_experts),
-                dtype=torch.float32,
-                device="cuda",
-            )
-            non_shared_topk_weights, shared_topk_weights = total_topk_weights.split([config.num_experts_per_tok, num_topK_pad_experts], dim=1)
-            shared_topk_weights.fill_(self.SHARED_E_SCORE)
-
-            # store in each expert
-            for i in range(len(self.layers)):
-                mlp = self.layers[i].mlp
-                if not isinstance(mlp, DeepseekV2MoE):
-                    continue
-
-                mlp.experts.total_topk_weights = total_topk_weights
-                mlp.experts.total_topk_ids = total_topk_ids
-                mlp.experts.non_shared_topk_weights = non_shared_topk_weights
-                mlp.experts.non_shared_topk_ids = non_shared_topk_ids
 
     def get_input_embeddings(self) -> torch.Tensor:
         return self.embed_tokens
@@ -1491,12 +1450,11 @@ class DeepseekV2Model(nn.Module):
         else:
             hidden_states = input_embeds
 
-        if _is_hip and get_bool_env_var("SGLANG_AITER_MOE"):
+        if hasattr(self.layers[0].mlp.experts, "non_shared_topk_weights"):
             model_dim = hidden_states.shape[-1]
             num_tokens = hidden_states.view(-1, model_dim).shape[0]
-            # TODO need find a formal way
-            assert num_tokens <= self.AITER_MOE_MAX_NUM_TOKENS, (
-                f"num_tokens {num_tokens} exceeds AITER_MOE_MAX_NUM_TOKENS {self.AITER_MOE_MAX_NUM_TOKENS}. consider disabling SGLANG_AITER_MOE"
+            assert num_tokens <= Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, (
+                f"num_tokens {num_tokens} exceeds AITER_MOE_MAX_NUM_TOKENS {self.AITER_MOE_MAX_NUM_TOKENS}. Consider disabling SGLANG_AITER_MOE"
             )
 
         residual = None
