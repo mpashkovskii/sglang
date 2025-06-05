@@ -9,8 +9,8 @@ USER root
 
 WORKDIR /sgl-workspace
 ARG BUILD_TYPE=all
-ARG SGL_REPO="https://github.com/sgl-project/sglang"
-ENV SGL_DEFAULT="main"
+ARG SGL_REPO="https://github.com/mpashkovskii/sglang"
+ENV SGL_DEFAULT="feat/mla-for-decode_al"
 ARG SGL_BRANCH=${SGL_DEFAULT}
 
 ARG TRITON_REPO="https://github.com/ROCm/triton.git"
