@@ -688,7 +688,6 @@ def decode_attention_fwd(
     attn_logits,
     attn_lse,
     kv_last_page_len,
-    max_seglen_q,
     num_kv_splits,
     max_kv_splits,
     sm_scale,
