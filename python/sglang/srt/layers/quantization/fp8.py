@@ -95,10 +95,9 @@ logger = logging.getLogger(__name__)
 
 class Fp8MoEBlockscaleBuffers:
     AITER_MOE_MAX_NUM_TOKENS: int = 4096 * 128
-    SHARED_E_SCORE: float = 1.0
+    SHARED_EXPERTS_SCORE: float = 1.0
 
     def __init__(self, top_k: int, n_routed_experts: int, n_shared_experts: int):
-        # all layers reuse same buffer
         self.total_topk_ids = torch.empty(
             (Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, top_k + n_shared_experts),
             dtype=torch.int32,
@@ -114,14 +113,13 @@ class Fp8MoEBlockscaleBuffers:
         shared_topk_ids_list = [shared_expert_ids] * Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS
         shared_topk_ids[:] = torch.tensor(shared_topk_ids_list, dtype=torch.int32, device="cuda")
         
-        # all layers reuse same buffer
         self.total_topk_weights = torch.empty(
             (Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, top_k + n_shared_experts),
             dtype=torch.float32,
             device="cuda",
         )
         self.non_shared_topk_weights, shared_topk_weights = self.total_topk_weights.split([top_k, n_shared_experts], dim=1)
-        shared_topk_weights.fill_(Fp8MoEBlockscaleBuffers.SHARED_E_SCORE)
+        shared_topk_weights.fill_(Fp8MoEBlockscaleBuffers.SHARED_EXPERTS_SCORE)
     
     def register_in_layer(self, layer: Module):
         layer.register_buffer("total_topk_ids", self.total_topk_ids, persistent=False)

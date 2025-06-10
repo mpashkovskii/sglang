@@ -250,6 +250,7 @@ class DeepseekV2MoE(nn.Module):
             ),
         )
         if _is_hip and get_bool_env_var("SGLANG_AITER_MOE") and isinstance(self.experts, FusedMoE):
+            # all layers reuse same buffer
             global Fp8MoEBlockscaleBuffersInstance
             if Fp8MoEBlockscaleBuffersInstance is None:
                 Fp8MoEBlockscaleBuffersInstance = Fp8MoEBlockscaleBuffers(
@@ -1450,7 +1451,10 @@ class DeepseekV2Model(nn.Module):
         else:
             hidden_states = input_embeds
 
-        if hasattr(self.layers[0].mlp.experts, "non_shared_topk_weights"):
+        if any(
+                isinstance(layer.mlp, DeepseekV2MoE) and hasattr(layer.mlp.experts, "non_shared_topk_weights")
+                for layer in self.layers
+        ):
             model_dim = hidden_states.shape[-1]
             num_tokens = hidden_states.view(-1, model_dim).shape[0]
             assert num_tokens <= Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, (
