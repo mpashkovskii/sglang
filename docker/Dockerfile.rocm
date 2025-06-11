@@ -10,8 +10,8 @@ USER root
 WORKDIR /sgl-workspace
 ARG BUILD_TYPE=all
 ARG SGL_REPO="https://github.com/mpashkovskii/sglang.git"
-ENV SGL_DEFAULT="feat/merge_mla_for_decode"
-ARG SGL_BRANCH=${SGL_DEFAULT}
+ENV SGL_DEFAULT="main"
+ARG SGL_BRANCH="feat/merge_mla_for_decode"
 
 ARG TRITON_REPO="https://github.com/ROCm/triton.git"
 ARG TRITON_COMMIT="improve_fa_decode_3.0.0"
