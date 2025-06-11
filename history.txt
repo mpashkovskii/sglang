@@ -1,0 +1,15 @@
+
+# 2025-06-11
+
+Command:
+
+CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
+
+Error message:
+
+File "/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py", line 720, in decode_attention_fwd
+    mla_decode_fwd(
+  File "/sgl-workspace/aiter/aiter/mla.py", line 114, in mla_decode_fwd
+    bs = qo_indptr.shape[0] - 1
+         ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'shape'
