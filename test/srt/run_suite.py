@@ -13,7 +13,6 @@ class TestFile:
 
 suites = {
     "per-commit": [
-        TestFile("layers/quantization/test_fp8.py", 250),
         TestFile("models/lora/test_lora.py", 76),
         TestFile("models/lora/test_lora_backend.py", 99),
         TestFile("models/lora/test_multi_lora_backend.py", 60),
@@ -80,6 +79,7 @@ suites = {
         TestFile("test_triton_moe_channel_fp8_kernel.py", 25),
         TestFile("test_update_weights_from_disk.py", 114),
         TestFile("test_update_weights_from_tensor.py", 48),
+        TestFile("test_utils.py", 2100),
         TestFile("test_vertex_endpoint.py", 31),
         TestFile("test_vision_chunked_prefill.py", 175),
         TestFile("test_vlm_accuracy.py", 60),

@@ -58,7 +58,6 @@ from sglang.srt.layers.moe.fused_moe_triton import FusedMoE
 from sglang.srt.layers.moe.topk import select_experts
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.quantization.deep_gemm import _ENABLE_JIT_DEEPGEMM
-from sglang.srt.layers.quantization.fp8 import Fp8MoEBlockscaleBuffers
 from sglang.srt.layers.quantization.fp8_kernel import (
     per_tensor_quant_mla_fp8,
     per_token_group_quant_mla_deep_gemm_masked_fp8,
@@ -83,6 +82,7 @@ from sglang.srt.managers.schedule_batch import global_server_args_dict
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, ForwardMode
 from sglang.srt.model_loader.weight_utils import default_weight_loader
 from sglang.srt.utils import (
+    AiterTopKRoutingBuffers,
     BumpAllocator,
     DeepEPMode,
     add_prefix,
@@ -114,7 +114,8 @@ expert_distribution_recorder = ExpertDistributionRecorder()
 
 logger = logging.getLogger(__name__)
 
-Fp8MoEBlockscaleBuffersInstance: Fp8MoEBlockscaleBuffers = None
+AiterTopKRoutingBuffersInstance: AiterTopKRoutingBuffers = None
+
 
 class AttnForwardMethod(IntEnum):
     # Use multi-head attention
@@ -251,14 +252,14 @@ class DeepseekV2MoE(nn.Module):
         )
         if _is_hip and get_bool_env_var("SGLANG_AITER_MOE") and isinstance(self.experts, FusedMoE):
             # all layers reuse same buffer
-            global Fp8MoEBlockscaleBuffersInstance
-            if Fp8MoEBlockscaleBuffersInstance is None:
-                Fp8MoEBlockscaleBuffersInstance = Fp8MoEBlockscaleBuffers(
+            global AiterTopKRoutingBuffersInstance
+            if AiterTopKRoutingBuffersInstance is None:
+                AiterTopKRoutingBuffersInstance = AiterTopKRoutingBuffers(
                     config.num_experts_per_tok,
                     config.n_routed_experts,
                     config.n_shared_experts,
                 )
-            Fp8MoEBlockscaleBuffersInstance.register_in_layer(self.experts)
+            AiterTopKRoutingBuffersInstance.register_in_layer(self.experts)
 
         if config.n_shared_experts is not None and self.n_share_experts_fusion == 0:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
@@ -1457,8 +1458,8 @@ class DeepseekV2Model(nn.Module):
         ):
             model_dim = hidden_states.shape[-1]
             num_tokens = hidden_states.view(-1, model_dim).shape[0]
-            assert num_tokens <= Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, (
-                f"num_tokens {num_tokens} exceeds AITER_MOE_MAX_NUM_TOKENS {self.AITER_MOE_MAX_NUM_TOKENS}. Consider disabling SGLANG_AITER_MOE"
+            assert num_tokens <= AiterTopKRoutingBuffers.MAX_NUM_TOKENS, (
+                f"num_tokens {num_tokens} exceeds MAX_NUM_TOKENS {AiterTopKRoutingBuffers.MAX_NUM_TOKENS}. Consider disabling SGLANG_AITER_MOE"
             )
 
         residual = None

@@ -26,7 +26,7 @@ class MockConfig:
 @patch('sglang.srt.distributed.parallel_state.get_tp_group', return_value=MagicMock(world_size=1))
 class TestDeepseekV2MoE(unittest.TestCase):
     def setUp(self):
-        deepseek_v2.Fp8MoEBlockscaleBuffersInstance = None
+        deepseek_v2.AiterTopKRoutingBuffersInstance = None
         self.config = MockConfig()
 
     def test_fp8moe_blockscale_buffers_registration(self, *_):
@@ -49,7 +49,7 @@ class TestDeepseekV2MoE(unittest.TestCase):
         )
         
         # Verify singleton is working
-        self.assertIsNotNone(deepseek_v2.Fp8MoEBlockscaleBuffersInstance)
+        self.assertIsNotNone(deepseek_v2.AiterTopKRoutingBuffersInstance)
         
         # Create another MoE instance should use the same buffers
         moe1 = deepseek_v2.DeepseekV2MoE(self.config, prefix="test2")
@@ -72,7 +72,7 @@ class TestDeepseekV2MoE(unittest.TestCase):
         self.assertFalse(hasattr(moe0.experts, "non_shared_topk_weights"))
         
         # Verify singleton is missing
-        self.assertIsNone(deepseek_v2.Fp8MoEBlockscaleBuffersInstance)
+        self.assertIsNone(deepseek_v2.AiterTopKRoutingBuffersInstance)
         
 
 if __name__ == "__main__":
