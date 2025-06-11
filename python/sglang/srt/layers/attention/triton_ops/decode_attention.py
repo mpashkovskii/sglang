@@ -731,7 +731,7 @@ def decode_attention_fwd(
             kv_indptr,
             kv_indices,
             kv_last_page_len,
-            max_seglen_q, 
+            1, 
             sm_scale,
             logit_cap,
         )
