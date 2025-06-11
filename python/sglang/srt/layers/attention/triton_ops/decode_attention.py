@@ -34,11 +34,6 @@ if _is_hip and get_bool_env_var("CK_MOE"):
 
 logger = logging.getLogger(__name__)
 
-# TODO: Remove this when triton>=3.2.0. This issue will not affect performance and accuracy.
-logger.warning(
-    "The following error message 'operation scheduled before its operands' can be ignored."
-)
-
 
 _MIN_BLOCK_KV = 32
 
