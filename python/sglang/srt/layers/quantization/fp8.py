@@ -93,41 +93,6 @@ ACTIVATION_SCHEMES = ["static", "dynamic"]
 logger = logging.getLogger(__name__)
 
 
-class Fp8MoEBlockscaleBuffers:
-    AITER_MOE_MAX_NUM_TOKENS: int = 4096 * 128
-    SHARED_EXPERTS_SCORE: float = 1.0
-
-    def __init__(self, top_k: int, n_routed_experts: int, n_shared_experts: int):
-        self.total_topk_ids = torch.empty(
-            (Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, top_k + n_shared_experts),
-            dtype=torch.int32,
-            device="cuda",
-        )
-        self.non_shared_topk_ids, shared_topk_ids = self.total_topk_ids.split(
-            [top_k, n_shared_experts], dim=1
-        )
-        shared_expert_ids = [
-            n_routed_experts + i
-            for i in range(n_shared_experts)
-        ]
-        shared_topk_ids_list = [shared_expert_ids] * Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS
-        shared_topk_ids[:] = torch.tensor(shared_topk_ids_list, dtype=torch.int32, device="cuda")
-        
-        self.total_topk_weights = torch.empty(
-            (Fp8MoEBlockscaleBuffers.AITER_MOE_MAX_NUM_TOKENS, top_k + n_shared_experts),
-            dtype=torch.float32,
-            device="cuda",
-        )
-        self.non_shared_topk_weights, shared_topk_weights = self.total_topk_weights.split([top_k, n_shared_experts], dim=1)
-        shared_topk_weights.fill_(Fp8MoEBlockscaleBuffers.SHARED_EXPERTS_SCORE)
-    
-    def register_in_layer(self, layer: Module):
-        layer.register_buffer("total_topk_ids", self.total_topk_ids, persistent=False)
-        layer.register_buffer("non_shared_topk_ids", self.non_shared_topk_ids, persistent=False)
-        layer.register_buffer("total_topk_weights", self.total_topk_weights, persistent=False)
-        layer.register_buffer("non_shared_topk_weights", self.non_shared_topk_weights, persistent=False)
-
-
 class Fp8Config(QuantizationConfig):
     """Config class for FP8."""
 
@@ -923,7 +888,7 @@ class Fp8MoEMethod:
         from sglang.srt.layers.moe.topk import select_experts
 
         # Expert selection
-        if correction_bias is not None and hasattr(layer, "non_shared_topk_weights"):
+        if correction_bias is not None and hasattr(layer, "total_topk_weights"):
             token = x.shape[0]
             biased_grouped_topk(
                 router_logits,
