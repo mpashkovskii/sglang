@@ -554,7 +554,11 @@ class TritonAttnBackend(AttentionBackend):
             max_extend_len = None
             num_kv_splits = self.cuda_graph_num_kv_splits
             kv_last_page_len = self.cuda_graph_kv_last_page_len
-            qo_indptr = None
+            # guess
+            qo_indptr = self.qo_indptr
+            qo_indptr[1 : bs + 1] = torch.cumsum(torch.ones(bs), dim=0)
+            qo_indptr = qo_indptr[: bs + 1]
+            #
             custom_mask = None
             mask_indptr = None
         elif forward_mode.is_target_verify():

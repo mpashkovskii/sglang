@@ -1,8 +1,20 @@
 
-# 2025-06-11
 
+----------------------------------------------------------------------------------------------------------------------------------------------------
+CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
+
+File "/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py", line 720, in decode_attention_fwd
+    mla_decode_fwd(
+  File "/sgl-workspace/aiter/aiter/mla.py", line 116, in mla_decode_fwd
+    num_kv_splits, mgc = get_meta_param(num_kv_splits, device, bs, nhead)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/aiter/aiter/mla.py", line 89, in get_meta_param
+    assert nhead in get_mgc, f"{nhead=} not supported"
+           ^^^^^^^^^^^^^^^^
+AssertionError: nhead=32 not supported
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
 Command:
-
 CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
 
 Error message:
