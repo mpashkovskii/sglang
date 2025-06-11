@@ -329,14 +329,17 @@ class TritonAttnBackend(AttentionBackend):
                 dtype=torch.float32,
                 device=self.device,
             )
-            kv_last_page_len = torch.ones(bs, dtype=torch.int)
             num_kv_splits = torch.empty((bs,), dtype=torch.int32, device=self.device)
             self.get_num_kv_splits(num_kv_splits, forward_batch.seq_lens)
 
-            qo_indptr = None
+            qo_indptr = self.qo_indptr
+            qo_indptr[1 : bs + 1] = torch.cumsum(torch.ones(bs), dim=0)
+            qo_indptr = qo_indptr[: bs + 1]
+
             custom_mask = None
             mask_indptr = None
             max_extend_len = None
+            kv_last_page_len = torch.ones(bs, dtype=torch.int)
         elif forward_batch.forward_mode.is_target_verify():
             # TODO: Support sliding window in spec inference
             bs = len(forward_batch.req_pool_indices)
