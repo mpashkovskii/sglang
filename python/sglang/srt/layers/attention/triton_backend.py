@@ -139,6 +139,7 @@ class ForwardMetadata:
     num_kv_splits: torch.Tensor
     kv_indptr: torch.Tensor
     kv_indices: torch.Tensor
+    kv_last_page_len: torch.Tensor
     qo_indptr: torch.Tensor
     custom_mask: torch.Tensor
     mask_indptr: torch.Tensor
@@ -331,10 +332,14 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits = torch.empty((bs,), dtype=torch.int32, device=self.device)
             self.get_num_kv_splits(num_kv_splits, forward_batch.seq_lens)
 
-            qo_indptr = None
+            qo_indptr = self.qo_indptr
+            qo_indptr[1 : bs + 1] = torch.cumsum(torch.ones(bs), dim=0)
+            qo_indptr = qo_indptr[: bs + 1]
+
             custom_mask = None
             mask_indptr = None
             max_extend_len = None
+            kv_last_page_len = torch.ones(bs, dtype=torch.int)
         elif forward_batch.forward_mode.is_target_verify():
             # TODO: Support sliding window in spec inference
             bs = len(forward_batch.req_pool_indices)
@@ -372,6 +377,7 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits = None
             attn_logits = None
             attn_lse = None
+            kv_last_page_len = None
         elif forward_batch.forward_mode.is_draft_extend():
             kv_indices, kv_indptr, qo_indptr, custom_mask = (
                 spec_info.generate_attn_arg_prefill(
@@ -389,6 +395,7 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits = None
             attn_logits = None
             attn_lse = None
+            kv_last_page_len = None
         else:
             kv_indptr[1 : bs + 1] = torch.cumsum(
                 forward_batch.extend_prefix_lens, dim=0
@@ -427,6 +434,7 @@ class TritonAttnBackend(AttentionBackend):
             mask_indptr = None
             attn_logits = None
             attn_lse = None
+            kv_last_page_len = torch.ones(bs, dtype=torch.int)
             max_extend_len = torch.max(forward_batch.extend_seq_lens).item()
             num_kv_splits = None
 
@@ -437,6 +445,7 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits,
             kv_indptr,
             kv_indices,
+            kv_last_page_len,
             qo_indptr,
             custom_mask,
             mask_indptr,
@@ -461,6 +470,7 @@ class TritonAttnBackend(AttentionBackend):
         self.cuda_graph_num_kv_splits = torch.full(
             (max_bs,), self.max_kv_splits, dtype=torch.int32, device=self.device
         )
+        self.cuda_graph_kv_last_page_len = torch.ones(max_bs, dtype=torch.int)
         if kv_indices_buf is None:
             self.cuda_graph_kv_indices = torch.zeros(
                 (max_bs * self.max_context_len),
@@ -543,7 +553,12 @@ class TritonAttnBackend(AttentionBackend):
             attn_lse = self.cuda_graph_attn_lse
             max_extend_len = None
             num_kv_splits = self.cuda_graph_num_kv_splits
-            qo_indptr = None
+            kv_last_page_len = self.cuda_graph_kv_last_page_len
+            # guess
+            qo_indptr = self.qo_indptr
+            qo_indptr[1 : bs + 1] = torch.cumsum(torch.ones(bs), dim=0)
+            qo_indptr = qo_indptr[: bs + 1]
+            #
             custom_mask = None
             mask_indptr = None
         elif forward_mode.is_target_verify():
@@ -576,6 +591,7 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits = None
             attn_logits = None
             attn_lse = None
+            kv_last_page_len = None
         elif forward_mode.is_draft_extend():
             num_tokens_per_bs = self.speculative_num_steps + 1
             qo_indptr = self.qo_indptr[: bs + 1]
@@ -616,6 +632,7 @@ class TritonAttnBackend(AttentionBackend):
             num_kv_splits,
             kv_indptr,
             kv_indices,
+            kv_last_page_len,
             qo_indptr,
             custom_mask,
             mask_indptr,
@@ -823,10 +840,12 @@ class TritonAttnBackend(AttentionBackend):
             forward_batch.token_to_kv_pool.get_key_buffer(layer.layer_id),
             forward_batch.token_to_kv_pool.get_value_buffer(layer.layer_id),
             o.view(-1, layer.tp_q_head_num, layer.v_head_dim),
+            self.forward_metadata.qo_indptr,
             kv_indptr,
             kv_indices,
             self.forward_metadata.attn_logits,
             self.forward_metadata.attn_lse,
+            self.forward_metadata.kv_last_page_len,
             self.forward_metadata.num_kv_splits,
             self.max_kv_splits,
             layer.scaling,
