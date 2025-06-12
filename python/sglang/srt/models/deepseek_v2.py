@@ -53,6 +53,7 @@ from sglang.srt.layers.linear import (
 from sglang.srt.layers.logits_processor import LogitsProcessor
 from sglang.srt.layers.moe.ep_moe.layer import get_moe_impl_class
 from sglang.srt.layers.moe.ep_moe.token_dispatcher import DeepEPDispatcher
+from sglang.srt.layers.moe.fused_moe_triton.layer import FusedMoE
 from sglang.srt.layers.moe.topk import select_experts
 from sglang.srt.layers.quantization.base_config import QuantizationConfig
 from sglang.srt.layers.quantization.deep_gemm import _ENABLE_JIT_DEEPGEMM
@@ -89,6 +90,7 @@ from sglang.srt.two_batch_overlap import (
     model_forward_maybe_tbo,
 )
 from sglang.srt.utils import (
+    AiterTopKRoutingBuffers,
     BumpAllocator,
     DeepEPMode,
     LazyValue,
@@ -125,6 +127,8 @@ if _use_aiter:
     from aiter.rotary_embedding import get_rope
 
 logger = logging.getLogger(__name__)
+
+AiterTopKRoutingBuffersInstance: AiterTopKRoutingBuffers = None
 
 
 class AttnForwardMethod(IntEnum):
@@ -273,6 +277,16 @@ class DeepseekV2MoE(nn.Module):
                 else {}
             ),
         )
+        if _use_aiter and isinstance(self.experts, FusedMoE):
+            # all layers reuse same buffers
+            global AiterTopKRoutingBuffersInstance
+            if AiterTopKRoutingBuffersInstance is None:
+                AiterTopKRoutingBuffersInstance = AiterTopKRoutingBuffers(
+                    config.num_experts_per_tok,
+                    config.n_routed_experts,
+                    config.n_shared_experts,
+                )
+            AiterTopKRoutingBuffersInstance.register_in_layer(self.experts)
 
         if config.n_shared_experts is not None and self.num_fused_shared_experts == 0:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
@@ -1630,6 +1644,17 @@ class DeepseekV2Model(nn.Module):
             hidden_states = self.embed_tokens(input_ids)
         else:
             hidden_states = input_embeds
+
+        if any(
+            isinstance(layer.mlp, DeepseekV2MoE)
+            and hasattr(layer.mlp.experts, "non_shared_topk_weights")
+            for layer in self.layers
+        ):
+            model_dim = hidden_states.shape[-1]
+            num_tokens = hidden_states.view(-1, model_dim).shape[0]
+            assert (
+                num_tokens <= AiterTopKRoutingBuffers.MAX_NUM_TOKENS
+            ), f"num_tokens {num_tokens} exceeds MAX_NUM_TOKENS {AiterTopKRoutingBuffers.MAX_NUM_TOKENS}. Consider disabling SGLANG_USE_AITER"
 
         residual = None
 
