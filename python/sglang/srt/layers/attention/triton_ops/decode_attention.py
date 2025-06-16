@@ -713,7 +713,7 @@ def decode_attention_fwd(
             num_kv_splits,
             max_kv_splits,
             sm_scale,
-            logit_cap,
+            logit_cap=logit_cap,
         )
     elif _is_hip and get_bool_env_var("CK_MOE"):
         # ROCM MLA
@@ -744,5 +744,5 @@ def decode_attention_fwd(
             num_kv_splits,
             max_kv_splits,
             sm_scale,
-            logit_cap,
+            logit_cap=logit_cap,
         )
