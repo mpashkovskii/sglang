@@ -16,9 +16,11 @@ ARG SGL_BRANCH="feat/merge_mla_for_decode"
 ARG TRITON_REPO="https://github.com/ROCm/triton.git"
 ARG TRITON_COMMIT="improve_fa_decode_3.0.0"
 
+ARG AITER_REPO="https://github.com/almaslof/aiter.git"
+ARG AITER_COMMIT="mydev"
+#ARG AITER_REPO="https://github.com/ROCm/aiter.git"
+#ARG AITER_COMMIT="v0.1.2"
 
-ARG AITER_REPO="https://github.com/ROCm/aiter.git"
-ARG AITER_COMMIT="v0.1.2"
 
 RUN git clone ${SGL_REPO} \
     && cd sglang \
