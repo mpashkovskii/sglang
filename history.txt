@@ -1,5 +1,43 @@
 
 
+
+
+
+20250618
+
+Successful run 
+
+python3 -m sglang.bench_serving --backend sglang --dataset-name random --num-prompts 5 --random-input 1024 --random-output 1024 --random-range-ratio 0.5
+
+============ Serving Benchmark Result ============
+Backend:                                 sglang
+Traffic request rate:                    inf
+Max request concurrency:                 not set
+Successful requests:                     5
+Benchmark duration (s):                  36.99
+Total input tokens:                      3177
+Total generated tokens:                  4193
+Total generated tokens (retokenized):    3347
+Request throughput (req/s):              0.14
+Input token throughput (tok/s):          85.89
+Output token throughput (tok/s):         113.36
+Total token throughput (tok/s):          199.25
+Concurrency:                             4.22
+----------------End-to-End Latency----------------
+Mean E2E Latency (ms):                   31183.87
+Median E2E Latency (ms):                 29720.57
+---------------Time to First Token----------------
+Mean TTFT (ms):                          1618.87
+Median TTFT (ms):                        2073.85
+P99 TTFT (ms):                           2074.30
+---------------Inter-Token Latency----------------
+Mean ITL (ms):                           35.30
+Median ITL (ms):                         35.06
+P95 ITL (ms):                            35.28
+P99 ITL (ms):                            35.34
+Max ITL (ms):                            1732.15
+==================================================
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------
 CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
 
