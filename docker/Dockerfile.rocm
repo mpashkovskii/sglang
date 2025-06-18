@@ -17,7 +17,8 @@ ARG TRITON_REPO="https://github.com/ROCm/triton.git"
 ARG TRITON_COMMIT="improve_fa_decode_3.0.0"
 
 ARG AITER_REPO="https://github.com/almaslof/aiter.git"
-ARG AITER_COMMIT="mydev"
+#ARG AITER_COMMIT="mydev"
+ARG AITER_COMMIT="058d99d95a8c0d0c9a17be21832a959939e1185a"
 #ARG AITER_REPO="https://github.com/ROCm/aiter.git"
 #ARG AITER_COMMIT="v0.1.2"
 
