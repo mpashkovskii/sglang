@@ -1,0 +1,98 @@
+
+
+
+
+
+20250618
+
+Run with aiter commit 
+
+============ Serving Benchmark Result ============
+Backend:                                 sglang
+Traffic request rate:                    inf
+Max request concurrency:                 not set
+Successful requests:                     5
+Benchmark duration (s):                  37.13
+Total input tokens:                      3177
+Total generated tokens:                  4193
+Total generated tokens (retokenized):    3347
+Request throughput (req/s):              0.13
+Input token throughput (tok/s):          85.56
+Output token throughput (tok/s):         112.92
+Total token throughput (tok/s):          198.48
+Concurrency:                             4.22
+----------------End-to-End Latency----------------
+Mean E2E Latency (ms):                   31310.07
+Median E2E Latency (ms):                 29858.83
+---------------Time to First Token----------------
+Mean TTFT (ms):                          1659.49
+Median TTFT (ms):                        2139.64
+P99 TTFT (ms):                           2139.97
+---------------Inter-Token Latency----------------
+Mean ITL (ms):                           35.40
+Median ITL (ms):                         35.04
+P95 ITL (ms):                            35.27
+P99 ITL (ms):                            35.43
+Max ITL (ms):                            1814.30
+==================================================
+
+Successful run 
+
+mydev aiter commit 058d99d95a8c0d0c9a17be21832a959939e1185a
+
+python3 -m sglang.bench_serving --backend sglang --dataset-name random --num-prompts 5 --random-input 1024 --random-output 1024 --random-range-ratio 0.5
+
+============ Serving Benchmark Result ============
+Backend:                                 sglang
+Traffic request rate:                    inf
+Max request concurrency:                 not set
+Successful requests:                     5
+Benchmark duration (s):                  36.99
+Total input tokens:                      3177
+Total generated tokens:                  4193
+Total generated tokens (retokenized):    3347
+Request throughput (req/s):              0.14
+Input token throughput (tok/s):          85.89
+Output token throughput (tok/s):         113.36
+Total token throughput (tok/s):          199.25
+Concurrency:                             4.22
+----------------End-to-End Latency----------------
+Mean E2E Latency (ms):                   31183.87
+Median E2E Latency (ms):                 29720.57
+---------------Time to First Token----------------
+Mean TTFT (ms):                          1618.87
+Median TTFT (ms):                        2073.85
+P99 TTFT (ms):                           2074.30
+---------------Inter-Token Latency----------------
+Mean ITL (ms):                           35.30
+Median ITL (ms):                         35.06
+P95 ITL (ms):                            35.28
+P99 ITL (ms):                            35.34
+Max ITL (ms):                            1732.15
+==================================================
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
+CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
+
+File "/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py", line 720, in decode_attention_fwd
+    mla_decode_fwd(
+  File "/sgl-workspace/aiter/aiter/mla.py", line 116, in mla_decode_fwd
+    num_kv_splits, mgc = get_meta_param(num_kv_splits, device, bs, nhead)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sgl-workspace/aiter/aiter/mla.py", line 89, in get_meta_param
+    assert nhead in get_mgc, f"{nhead=} not supported"
+           ^^^^^^^^^^^^^^^^
+AssertionError: nhead=32 not supported
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Command:
+CK_MOE=1 python3 -m sglang.launch_server --model-path deepseek-ai/DeepSeek-R1 --attention-backend triton --tp 4 --trust-remote-code --port 3000
+
+Error message:
+
+File "/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py", line 720, in decode_attention_fwd
+    mla_decode_fwd(
+  File "/sgl-workspace/aiter/aiter/mla.py", line 114, in mla_decode_fwd
+    bs = qo_indptr.shape[0] - 1
+         ^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'shape'
