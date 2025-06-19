@@ -5,6 +5,37 @@
 
 20250618
 
+Run with aiter commit 
+
+============ Serving Benchmark Result ============
+Backend:                                 sglang
+Traffic request rate:                    inf
+Max request concurrency:                 not set
+Successful requests:                     5
+Benchmark duration (s):                  37.13
+Total input tokens:                      3177
+Total generated tokens:                  4193
+Total generated tokens (retokenized):    3347
+Request throughput (req/s):              0.13
+Input token throughput (tok/s):          85.56
+Output token throughput (tok/s):         112.92
+Total token throughput (tok/s):          198.48
+Concurrency:                             4.22
+----------------End-to-End Latency----------------
+Mean E2E Latency (ms):                   31310.07
+Median E2E Latency (ms):                 29858.83
+---------------Time to First Token----------------
+Mean TTFT (ms):                          1659.49
+Median TTFT (ms):                        2139.64
+P99 TTFT (ms):                           2139.97
+---------------Inter-Token Latency----------------
+Mean ITL (ms):                           35.40
+Median ITL (ms):                         35.04
+P95 ITL (ms):                            35.27
+P99 ITL (ms):                            35.43
+Max ITL (ms):                            1814.30
+==================================================
+
 Successful run 
 
 mydev aiter commit 058d99d95a8c0d0c9a17be21832a959939e1185a
